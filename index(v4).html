@@ -1,0 +1,1142 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Sketch a 2D profile, choose its pivot, and explore airflow, pressure, lift, drag, and vortex shedding in a real-time lattice-Boltzmann wind tunnel.">
+  <meta name="theme-color" content="#071019">
+  <title>WindLab 2D — Interactive Wind Tunnel</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23071019'/%3E%3Cpath d='M8 23h29c8 0 8-10 1-10-4 0-6 3-6 5' fill='none' stroke='%2359e6ee' stroke-width='5' stroke-linecap='round'/%3E%3Cpath d='M8 33h41c8 0 8 11 0 11-4 0-6-3-6-6' fill='none' stroke='%23ffb45f' stroke-width='5' stroke-linecap='round'/%3E%3Cpath d='M8 43h20' stroke='%2359e6ee' stroke-width='5' stroke-linecap='round'/%3E%3C/svg%3E">
+  <style>
+    :root {
+      color-scheme: dark;
+      --ink: #f1f7fb;
+      --muted: #8ea1af;
+      --muted-2: #647786;
+      --bg: #050b11;
+      --panel: #09121b;
+      --panel-2: #0c1722;
+      --line: #1b2b39;
+      --line-strong: #2a3d4d;
+      --cyan: #59e6ee;
+      --cyan-soft: rgba(89, 230, 238, .14);
+      --amber: #ffb45f;
+      --amber-soft: rgba(255, 180, 95, .14);
+      --red: #ff6b6b;
+      --green: #6fe7b0;
+      --radius: 14px;
+      --mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      --sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    html { min-width: 320px; background: var(--bg); }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      min-height: 100svh;
+      overflow: hidden;
+      color: var(--ink);
+      background: radial-gradient(circle at 58% -20%, rgba(51, 115, 144, .16), transparent 38rem), var(--bg);
+      font-family: var(--sans);
+      font-size: 16px;
+      line-height: 1.45;
+    }
+
+    button, input, select { font: inherit; }
+    button, select, input[type="range"] { accent-color: var(--cyan); }
+    button:focus-visible, select:focus-visible, input:focus-visible, canvas:focus-visible, summary:focus-visible {
+      outline: 2px solid var(--cyan);
+      outline-offset: 2px;
+    }
+    button:disabled, input:disabled, select:disabled { opacity: .42; cursor: not-allowed; }
+
+    .app { display: grid; grid-template-rows: 68px minmax(0, 1fr) 28px; height: 100vh; height: 100svh; }
+    .topbar {
+      position: relative;
+      z-index: 5;
+      display: grid;
+      grid-template-columns: minmax(190px, 1fr) auto minmax(190px, 1fr);
+      align-items: center;
+      gap: 18px;
+      padding: 0 20px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(5, 11, 17, .92);
+      backdrop-filter: blur(16px);
+    }
+    .brand { display: inline-flex; align-items: center; gap: 11px; min-width: 0; }
+    .brand-mark {
+      display: grid;
+      place-items: center;
+      width: 36px;
+      height: 36px;
+      flex: 0 0 auto;
+      border: 1px solid #294353;
+      border-radius: 10px;
+      background: linear-gradient(145deg, #102532, #08121b);
+      box-shadow: inset 0 1px rgba(255,255,255,.05), 0 8px 22px rgba(0,0,0,.2);
+    }
+    .brand-mark svg { width: 23px; height: 23px; }
+    .brand-copy { min-width: 0; }
+    .brand-name { display: flex; align-items: baseline; gap: 7px; font-weight: 750; letter-spacing: .08em; line-height: 1.1; }
+    .brand-name span { color: var(--cyan); font-family: var(--mono); font-size: .74rem; }
+    .brand-sub {
+      margin-top: 3px;
+      overflow: hidden;
+      color: var(--muted-2);
+      font-family: var(--mono);
+      font-size: .7rem;
+      letter-spacing: .04em;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .mode-switch {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      padding: 4px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #071019;
+      box-shadow: inset 0 1px 8px rgba(0,0,0,.24);
+    }
+    .mode-btn {
+      min-width: 126px;
+      padding: 8px 15px;
+      border: 0;
+      border-radius: 8px;
+      color: var(--muted);
+      background: transparent;
+      cursor: pointer;
+      font-size: .88rem;
+      font-weight: 680;
+      letter-spacing: .01em;
+      transition: color .18s ease, background .18s ease, box-shadow .18s ease;
+    }
+    .mode-btn.active {
+      color: #eaffff;
+      background: linear-gradient(180deg, rgba(62, 184, 198, .27), rgba(29, 105, 120, .22));
+      box-shadow: inset 0 0 0 1px rgba(89,230,238,.28), 0 4px 14px rgba(0,0,0,.2);
+    }
+    .mode-btn .key { margin-left: 6px; opacity: .48; font-family: var(--mono); font-size: .7rem; }
+    .top-actions { display: flex; justify-content: flex-end; gap: 8px; }
+    .icon-btn {
+      display: inline-grid;
+      place-items: center;
+      width: 38px;
+      height: 38px;
+      padding: 0;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      color: var(--muted);
+      background: #09131d;
+      cursor: pointer;
+      transition: border-color .18s ease, color .18s ease, transform .18s ease;
+    }
+    .icon-btn:hover:not(:disabled) { color: var(--ink); border-color: var(--line-strong); transform: translateY(-1px); }
+    .icon-btn.active { color: var(--amber); border-color: rgba(255,180,95,.42); background: var(--amber-soft); }
+    .icon-btn svg { width: 18px; height: 18px; }
+
+    .workspace { display: grid; grid-template-columns: 250px minmax(420px, 1fr) 278px; min-height: 0; }
+    .sidebar {
+      min-height: 0;
+      overflow: auto;
+      scrollbar-width: thin;
+      scrollbar-color: #243745 transparent;
+      background: rgba(7, 15, 23, .76);
+    }
+    .sidebar.left { border-right: 1px solid var(--line); }
+    .sidebar.right { border-left: 1px solid var(--line); }
+    .side-section { padding: 18px 17px; border-bottom: 1px solid var(--line); }
+    .eyebrow {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin: 0 0 13px;
+      color: var(--muted-2);
+      font-family: var(--mono);
+      font-size: .68rem;
+      font-weight: 700;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+    .eyebrow .state-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--cyan); box-shadow: 0 0 9px rgba(89,230,238,.7); }
+    .section-title { margin: 0 0 7px; font-size: 1rem; font-weight: 700; letter-spacing: -.015em; }
+    .section-copy { margin: 0 0 14px; color: var(--muted); font-size: .82rem; line-height: 1.5; }
+    .tool-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; margin-bottom: 13px; }
+    .tool-btn {
+      min-height: 62px;
+      padding: 8px 5px 7px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      color: var(--muted);
+      background: #0a141e;
+      cursor: pointer;
+      font-size: .72rem;
+      font-weight: 650;
+      transition: background .16s ease, color .16s ease, border-color .16s ease;
+    }
+    .tool-btn svg { display: block; width: 20px; height: 20px; margin: 0 auto 5px; }
+    .tool-btn:hover:not(:disabled) { color: var(--ink); border-color: var(--line-strong); }
+    .tool-btn.active { color: var(--cyan); border-color: rgba(89,230,238,.42); background: var(--cyan-soft); }
+    .tool-btn.pivot.active { color: var(--amber); border-color: rgba(255,180,95,.48); background: var(--amber-soft); }
+    .shape-status {
+      display: flex;
+      align-items: flex-start;
+      gap: 9px;
+      min-height: 58px;
+      margin-bottom: 12px;
+      padding: 10px 11px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: rgba(255,255,255,.018);
+    }
+    .shape-status-icon { display: grid; place-items: center; width: 23px; height: 23px; flex: 0 0 auto; border-radius: 50%; color: var(--cyan); background: var(--cyan-soft); font-size: .72rem; font-weight: 800; }
+    .shape-status strong { display: block; font-size: .78rem; font-weight: 700; }
+    .shape-status span { display: block; margin-top: 2px; color: var(--muted-2); font-size: .72rem; line-height: 1.35; }
+    .button-row { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+    .button-row + .button-row { margin-top: 7px; }
+    .text-btn {
+      min-height: 36px;
+      padding: 7px 10px;
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      color: var(--muted);
+      background: #0a141e;
+      cursor: pointer;
+      font-size: .76rem;
+      font-weight: 650;
+      transition: color .16s ease, border-color .16s ease, background .16s ease;
+    }
+    .text-btn:hover:not(:disabled) { color: var(--ink); border-color: var(--line-strong); }
+    .text-btn.primary { color: #052027; border-color: #64eaf1; background: var(--cyan); }
+    .text-btn.primary:hover:not(:disabled) { color: #021418; border-color: #a9f7fb; background: #8df0f5; }
+    .text-btn.warning { color: #ffd19e; border-color: rgba(255,180,95,.28); }
+    .text-btn.wide { grid-column: 1 / -1; }
+    .micro-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+    .micro-list li { display: grid; grid-template-columns: 22px 1fr; gap: 8px; color: var(--muted); font-size: .75rem; }
+    .step-num { display: grid; place-items: center; width: 20px; height: 20px; border: 1px solid #28404f; border-radius: 6px; color: var(--cyan); font-family: var(--mono); font-size: .64rem; }
+
+    .stage {
+      position: relative;
+      display: flex;
+      min-width: 0;
+      min-height: 0;
+      padding: 18px;
+      overflow: hidden;
+      background: linear-gradient(rgba(255,255,255,.008), rgba(255,255,255,0)), #050b11;
+    }
+    .canvas-frame {
+      position: relative;
+      width: 100%;
+      max-width: 1400px;
+      aspect-ratio: 2 / 1;
+      max-height: 100%;
+      margin: auto;
+      overflow: hidden;
+      border: 1px solid #233645;
+      border-radius: var(--radius);
+      background: #07111a;
+      box-shadow: 0 22px 60px rgba(0,0,0,.3), inset 0 1px rgba(255,255,255,.03);
+    }
+    #tunnel { display: block; width: 100%; height: 100%; touch-action: none; cursor: crosshair; }
+    body[data-mode="test"] #tunnel { cursor: default; }
+    body[data-tool="pivot"] #tunnel { cursor: crosshair; }
+    .canvas-badge {
+      position: absolute;
+      top: 13px;
+      left: 14px;
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 6px 9px;
+      border: 1px solid rgba(113, 148, 168, .24);
+      border-radius: 8px;
+      color: #b9c9d3;
+      background: rgba(4, 10, 16, .72);
+      backdrop-filter: blur(8px);
+      font-family: var(--mono);
+      font-size: .64rem;
+      font-weight: 700;
+      letter-spacing: .08em;
+      pointer-events: none;
+      text-transform: uppercase;
+    }
+    .canvas-badge::before { width: 6px; height: 6px; border-radius: 50%; background: var(--cyan); box-shadow: 0 0 8px rgba(89,230,238,.7); content: ""; }
+    .canvas-coords { position: absolute; top: 15px; right: 15px; color: rgba(184, 207, 219, .6); font-family: var(--mono); font-size: .65rem; pointer-events: none; }
+    body[data-mode="test"] .canvas-coords { display: none; }
+    .canvas-hint {
+      position: absolute;
+      bottom: 13px;
+      left: 50%;
+      max-width: calc(100% - 180px);
+      padding: 6px 10px;
+      transform: translateX(-50%);
+      border: 1px solid rgba(113, 148, 168, .2);
+      border-radius: 8px;
+      color: #a8bac5;
+      background: rgba(4, 10, 16, .74);
+      backdrop-filter: blur(8px);
+      font-size: .7rem;
+      line-height: 1.3;
+      pointer-events: none;
+      text-align: center;
+    }
+    .legend { position: absolute; right: 15px; bottom: 15px; display: none; width: 118px; padding: 7px 8px; border: 1px solid rgba(113, 148, 168, .22); border-radius: 8px; background: rgba(4, 10, 16, .74); backdrop-filter: blur(8px); pointer-events: none; }
+    body[data-mode="test"] .legend { display: block; }
+    .legend-label { display: flex; justify-content: space-between; margin-bottom: 4px; color: #a8bac5; font-family: var(--mono); font-size: .58rem; }
+    .legend-bar { height: 6px; border-radius: 9px; background: linear-gradient(90deg, #06101d, #0b4a74, #14aebf, #d3e286, #ff8049); }
+    body[data-display="vorticity"] .legend-bar { background: linear-gradient(90deg, #2c6bea, #12213e, #09121b, #362019, #ff8a4c); }
+    body[data-display="pressure"] .legend-bar { background: linear-gradient(90deg, #2e6dd1, #75c4e8, #d9e6ea, #f0ad78, #d95353); }
+    .toast {
+      position: fixed;
+      z-index: 20;
+      left: 50%;
+      bottom: 46px;
+      max-width: min(430px, calc(100vw - 32px));
+      padding: 10px 13px;
+      transform: translate(-50%, 14px);
+      border: 1px solid #365064;
+      border-radius: 10px;
+      color: var(--ink);
+      background: rgba(11, 24, 35, .96);
+      box-shadow: 0 15px 40px rgba(0,0,0,.4);
+      font-size: .8rem;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .18s ease, transform .18s ease;
+    }
+    .toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+    .control { margin-top: 16px; }
+    .control:first-of-type { margin-top: 0; }
+    .control-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 9px; }
+    .control-label { color: #c9d5dc; font-size: .79rem; font-weight: 650; }
+    .control-value { color: var(--cyan); font-family: var(--mono); font-size: .78rem; }
+    .range-wrap { position: relative; display: flex; align-items: center; }
+    input[type="range"] { width: 100%; height: 20px; margin: 0; appearance: none; background: transparent; cursor: pointer; }
+    input[type="range"]::-webkit-slider-runnable-track { height: 4px; border-radius: 4px; background: linear-gradient(90deg, #18384a, #2fb8c2); }
+    input[type="range"]::-webkit-slider-thumb { width: 16px; height: 16px; margin-top: -6px; appearance: none; border: 2px solid #071019; border-radius: 50%; background: var(--cyan); box-shadow: 0 0 0 1px rgba(89,230,238,.42), 0 3px 8px rgba(0,0,0,.4); }
+    input[type="range"]::-moz-range-track { height: 4px; border: 0; border-radius: 4px; background: linear-gradient(90deg, #18384a, #2fb8c2); }
+    input[type="range"]::-moz-range-thumb { width: 14px; height: 14px; border: 2px solid #071019; border-radius: 50%; background: var(--cyan); }
+    .range-scale { display: flex; justify-content: space-between; margin-top: 3px; color: var(--muted-2); font-family: var(--mono); font-size: .6rem; }
+    .angle-nudges { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-top: 7px; }
+    .nudge { padding: 5px 4px; border: 1px solid var(--line); border-radius: 7px; color: var(--muted); background: #09141e; cursor: pointer; font-family: var(--mono); font-size: .68rem; }
+    .nudge:hover:not(:disabled) { color: var(--ink); border-color: var(--line-strong); }
+    .select-wrap { position: relative; }
+    select { width: 100%; padding: 9px 30px 9px 10px; appearance: none; border: 1px solid var(--line); border-radius: 9px; color: #d8e3e9; background: #09141e; cursor: pointer; font-size: .78rem; }
+    .select-wrap::after { position: absolute; top: 50%; right: 11px; transform: translateY(-55%); color: var(--muted); content: "⌄"; pointer-events: none; }
+    .metric-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .metric { min-height: 73px; padding: 10px; border: 1px solid var(--line); border-radius: 10px; background: linear-gradient(145deg, rgba(18,37,50,.5), rgba(7,15,23,.7)); }
+    .metric-label { display: flex; align-items: center; gap: 5px; color: var(--muted-2); font-family: var(--mono); font-size: .6rem; letter-spacing: .06em; text-transform: uppercase; }
+    .metric-value { margin-top: 4px; color: #eaf8fb; font-family: var(--mono); font-size: 1.12rem; font-weight: 650; letter-spacing: -.03em; }
+    .metric-sub { margin-top: 1px; color: var(--muted-2); font-size: .62rem; }
+    .metric.lift .metric-value { color: var(--cyan); }
+    .metric.drag .metric-value { color: var(--amber); }
+    .metric.wide { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr auto; align-items: center; min-height: 58px; }
+    .metric.wide .metric-value { margin: 0; font-size: .9rem; }
+    .settling { display: flex; align-items: center; gap: 8px; margin-top: 10px; color: var(--muted-2); font-size: .7rem; }
+    .settling-bar { flex: 1; height: 3px; overflow: hidden; border-radius: 5px; background: #142430; }
+    .settling-fill { width: 0; height: 100%; border-radius: inherit; background: var(--cyan); transition: width .2s linear; }
+    .model-note { border-left: 2px solid #2f6170; padding-left: 10px; color: var(--muted); font-size: .72rem; line-height: 1.5; }
+    .model-note strong { color: #c5d5dd; font-weight: 650; }
+    details { margin-top: 11px; }
+    summary { color: #9fb3bf; cursor: pointer; font-size: .72rem; }
+    details p { margin: 8px 0 0; color: var(--muted-2); font-size: .69rem; line-height: 1.5; }
+
+    .statusbar { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 0 13px; overflow: hidden; border-top: 1px solid var(--line); color: var(--muted-2); background: #050a10; font-family: var(--mono); font-size: .62rem; letter-spacing: .02em; white-space: nowrap; }
+    .status-group { display: flex; align-items: center; gap: 13px; min-width: 0; }
+    .status-item { display: inline-flex; align-items: center; gap: 6px; }
+    .status-light { width: 6px; height: 6px; border-radius: 50%; background: var(--green); box-shadow: 0 0 7px rgba(111,231,176,.55); }
+    .status-light.paused { background: var(--amber); box-shadow: none; }
+    dialog { width: min(520px, calc(100vw - 32px)); padding: 0; border: 1px solid #29404f; border-radius: 14px; color: var(--ink); background: #09131d; box-shadow: 0 28px 90px rgba(0,0,0,.58); }
+    dialog::backdrop { background: rgba(0, 6, 10, .7); backdrop-filter: blur(5px); }
+    .dialog-head { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 16px 18px; border-bottom: 1px solid var(--line); }
+    .dialog-head h2 { margin: 0; font-size: 1rem; }
+    .dialog-body { padding: 17px 18px 19px; color: var(--muted); font-size: .82rem; line-height: 1.58; }
+    .dialog-body ol { margin: 8px 0 14px; padding-left: 21px; }
+    .dialog-body li + li { margin-top: 6px; }
+    .dialog-body strong { color: #d8e6ec; }
+
+    @media (max-width: 1120px) {
+      body { overflow: auto; }
+      .app { height: auto; min-height: 100svh; grid-template-rows: 68px auto 28px; }
+      .workspace { grid-template-columns: 232px minmax(0, 1fr); }
+      .sidebar.right { grid-column: 1 / -1; display: grid; grid-template-columns: 1.15fr 1fr 1fr; border-top: 1px solid var(--line); border-left: 0; }
+      .sidebar.right .side-section { border-right: 1px solid var(--line); border-bottom: 0; }
+      .stage { min-height: 480px; }
+    }
+    @media (max-width: 740px) {
+      .topbar { grid-template-columns: 1fr auto; height: auto; min-height: 68px; padding: 10px 13px; }
+      .app { grid-template-rows: auto auto 28px; }
+      .brand-sub, .mode-btn .key { display: none; }
+      .mode-switch { grid-row: 2; grid-column: 1 / -1; width: 100%; }
+      .mode-btn { min-width: 0; }
+      .top-actions { grid-column: 2; grid-row: 1; }
+      .workspace { display: flex; flex-direction: column; }
+      .stage { order: 0; min-height: 300px; padding: 10px; }
+      .canvas-frame { min-height: 280px; aspect-ratio: 1.55 / 1; }
+      .sidebar.left { order: 1; border-top: 1px solid var(--line); border-right: 0; }
+      .sidebar.right { order: 2; display: block; }
+      .sidebar.right .side-section { border-right: 0; border-bottom: 1px solid var(--line); }
+      .canvas-hint { bottom: 10px; max-width: calc(100% - 32px); }
+      body[data-mode="test"] .canvas-hint { display: none; }
+      .legend { right: 10px; bottom: 10px; width: 102px; }
+      .statusbar .status-group:last-child { display: none; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .001ms !important; animation-duration: .001ms !important; }
+    }
+  </style>
+</head>
+<body data-mode="sketch" data-tool="curve" data-display="speed">
+  <div class="app">
+    <header class="topbar">
+      <div class="brand" aria-label="WindLab 2D">
+        <div class="brand-mark" aria-hidden="true"><svg viewBox="0 0 28 28" fill="none"><path d="M3 9.5h12.7c4.7 0 4.6-5.8.5-5.8-2.2 0-3.2 1.5-3.2 2.9" stroke="#59e6ee" stroke-width="2.2" stroke-linecap="round"/><path d="M3 14h18c4.8 0 4.7 6.5.3 6.5-2.2 0-3.3-1.7-3.3-3.2" stroke="#ffb45f" stroke-width="2.2" stroke-linecap="round"/><path d="M3 19h9" stroke="#59e6ee" stroke-width="2.2" stroke-linecap="round"/></svg></div>
+        <div class="brand-copy"><div class="brand-name">WINDLAB <span>2D</span></div><div class="brand-sub">INTERACTIVE FLOW WORKBENCH</div></div>
+      </div>
+      <nav class="mode-switch" aria-label="Simulator mode">
+        <button class="mode-btn active" id="sketchModeBtn" type="button" aria-pressed="true">Sketch <span class="key">S</span></button>
+        <button class="mode-btn" id="testModeBtn" type="button" aria-pressed="false">Test <span class="key">T</span></button>
+      </nav>
+      <div class="top-actions">
+        <button class="icon-btn" id="pauseBtn" type="button" title="Pause simulation (Space)" aria-label="Pause simulation" disabled><svg class="pause-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 5v14M16 5v14"/></svg></button>
+        <button class="icon-btn" id="resetFlowBtn" type="button" title="Reset flow field (R)" aria-label="Reset flow field" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 7v5h-5"/><path d="M19 12a7 7 0 1 1-2.05-4.95L20 10"/></svg></button>
+        <button class="icon-btn" id="helpBtn" type="button" title="Quick guide" aria-label="Open quick guide"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M9.7 9a2.45 2.45 0 1 1 3.1 2.36c-.8.28-.8 1.14-.8 1.64"/><path d="M12 17h.01"/></svg></button>
+      </div>
+    </header>
+
+    <main class="workspace">
+      <aside class="sidebar left" aria-label="Shape tools">
+        <section class="side-section">
+          <p class="eyebrow">Shape tools <span class="state-dot" aria-hidden="true"></span></p>
+          <h1 class="section-title">Build a test profile</h1>
+          <p class="section-copy">Trace one continuous outline, close it, then place the point the body will rotate around.</p>
+          <div class="tool-grid" role="toolbar" aria-label="Drawing tools">
+            <button class="tool-btn active" id="curveTool" type="button" aria-pressed="true" title="Draw a smooth freehand segment"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 18C7 4 13 21 21 6"/><path d="M3 18h.01M21 6h.01" stroke-width="3" stroke-linecap="round"/></svg>Curve</button>
+            <button class="tool-btn" id="lineTool" type="button" aria-pressed="false" title="Add straight line vertices"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m4 18 6-10 10 7"/><circle cx="4" cy="18" r="1.5"/><circle cx="10" cy="8" r="1.5"/><circle cx="20" cy="15" r="1.5"/></svg>Line</button>
+            <button class="tool-btn pivot" id="pivotTool" type="button" aria-pressed="false" title="Choose the center of rotation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="6"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/></svg>Pivot</button>
+          </div>
+          <div class="shape-status" aria-live="polite"><div class="shape-status-icon" id="shapeStatusIcon">✓</div><div><strong id="shapeStatusTitle">Reference airfoil ready</strong><span id="shapeStatusCopy">Closed profile · pivot at area centroid</span></div></div>
+          <div class="button-row"><button class="text-btn primary" id="closeShapeBtn" type="button" disabled>Close shape</button><button class="text-btn" id="undoBtn" type="button" disabled>Undo</button></div>
+          <div class="button-row"><button class="text-btn warning" id="newShapeBtn" type="button">New shape</button><button class="text-btn" id="airfoilBtn" type="button">Load airfoil</button></div>
+          <div class="button-row"><button class="text-btn wide" id="runTestBtn" type="button">Run wind tunnel →</button></div>
+        </section>
+        <section class="side-section">
+          <p class="eyebrow">Workflow</p>
+          <ol class="micro-list"><li><span class="step-num">01</span><span>Use Curve or Line to create a non-crossing outline.</span></li><li><span class="step-num">02</span><span>Close the shape, then select Pivot and click the canvas.</span></li><li><span class="step-num">03</span><span>Switch to Test and compare wake, lift, and drag.</span></li></ol>
+        </section>
+      </aside>
+
+      <section class="stage" aria-label="Wind tunnel workspace">
+        <div class="canvas-frame" id="canvasFrame">
+          <canvas id="tunnel" tabindex="0" aria-label="Interactive 2D wind tunnel canvas. In sketch mode, use the selected tool to draw a closed shape. In test mode, the canvas displays simulated airflow."></canvas>
+          <div class="canvas-badge" id="canvasBadge">Sketch surface</div>
+          <div class="canvas-coords" id="canvasCoords">x 450 · y 225</div>
+          <div class="canvas-hint" id="canvasHint">A NACA-style profile is loaded. Choose New shape to draw your own, or run the test now.</div>
+          <div class="legend" aria-hidden="true"><div class="legend-label"><span id="legendLow">slow</span><span id="legendName">speed</span><span id="legendHigh">fast</span></div><div class="legend-bar"></div></div>
+        </div>
+      </section>
+
+      <aside class="sidebar right" aria-label="Test controls and results">
+        <section class="side-section test-controls">
+          <p class="eyebrow">Test conditions</p>
+          <div class="control"><div class="control-head"><label class="control-label" for="speedRange">Air speed</label><output class="control-value" id="speedValue">28.0 m/s</output></div><div class="range-wrap"><input id="speedRange" type="range" min="0" max="100" step="0.5" value="28" disabled></div><div class="range-scale"><span>0</span><span>50</span><span>100 m/s</span></div></div>
+          <div class="control"><div class="control-head"><label class="control-label" for="angleRange">Body angle</label><output class="control-value" id="angleValue">0.0°</output></div><div class="range-wrap"><input id="angleRange" type="range" min="-90" max="90" step="0.5" value="0" disabled></div><div class="range-scale"><span>−90°</span><span>0°</span><span>+90°</span></div><div class="angle-nudges"><button class="nudge" data-angle="-1" type="button" disabled>−1°</button><button class="nudge" data-angle="0" type="button" disabled>zero</button><button class="nudge" data-angle="1" type="button" disabled>+1°</button></div></div>
+          <div class="control"><div class="control-head"><label class="control-label" for="displaySelect">Flow field</label></div><div class="select-wrap"><select id="displaySelect" disabled><option value="speed">Speed magnitude</option><option value="vorticity">Vorticity</option><option value="pressure">Static pressure</option></select></div></div>
+        </section>
+        <section class="side-section">
+          <p class="eyebrow">Live estimates <span id="sampleState">ready</span></p>
+          <div class="metric-grid">
+            <div class="metric lift"><div class="metric-label">Lift coeff. <span>C<sub>L</sub></span></div><div class="metric-value" id="clValue">0.000</div><div class="metric-sub" id="liftForce">0.0 N/m</div></div>
+            <div class="metric drag"><div class="metric-label">Drag coeff. <span>C<sub>D</sub></span></div><div class="metric-value" id="cdValue">0.000</div><div class="metric-sub" id="dragForce">0.0 N/m</div></div>
+            <div class="metric"><div class="metric-label">Efficiency <span>L/D</span></div><div class="metric-value" id="ldValue">—</div><div class="metric-sub">signed ratio</div></div>
+            <div class="metric"><div class="metric-label">Moment <span>C<sub>M</sub></span></div><div class="metric-value" id="cmValue">0.000</div><div class="metric-sub">about pivot</div></div>
+            <div class="metric wide"><div><div class="metric-label">Reynolds number</div><div class="metric-sub">1.0 m reference · air at 20 °C</div></div><div class="metric-value" id="reValue">1.87M</div></div>
+          </div>
+          <div class="settling"><span id="settlingLabel">Flow not started</span><div class="settling-bar"><div class="settling-fill" id="settlingFill"></div></div></div>
+        </section>
+        <section class="side-section">
+          <p class="eyebrow">Model fidelity</p>
+          <div class="model-note"><strong>Real fluid grid, real wake dynamics.</strong> A D2Q9 lattice-Boltzmann solver applies no-slip bounce-back at the body. Readouts blend the unsteady pressure signal with a sectional aerodynamic model.</div>
+          <details><summary>What the numbers mean</summary><p>This is a real-time, two-dimensional incompressible approximation. It captures separation, recirculation, and vortex shedding for comparison, but finite grid size and the absence of 3D effects mean it is not a substitute for engineering CFD or wind-tunnel validation.</p></details>
+        </section>
+      </aside>
+    </main>
+
+    <footer class="statusbar"><div class="status-group"><span class="status-item"><span class="status-light" id="statusLight"></span><span id="solverStatus">SKETCH READY</span></span><span id="gridStatus">D2Q9 · 180 × 90 cells</span></div><div class="status-group"><span id="stepStatus">0 iterations</span><span>SPACE pause · R reset</span></div></footer>
+  </div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <dialog id="helpDialog"><div class="dialog-head"><h2>Quick guide</h2><button class="icon-btn" id="closeHelpBtn" type="button" aria-label="Close guide"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div><div class="dialog-body"><ol><li>Select <strong>New shape</strong>, then add straight segments with Line or drag smooth segments with Curve.</li><li>Select <strong>Close shape</strong>. Crossing outlines are rejected because they do not define one solid body.</li><li>Select <strong>Pivot</strong> and click anywhere on the canvas. Rotation in Test mode occurs around that exact point.</li><li>Enter <strong>Test</strong>, adjust air speed and angle, and switch between speed, vorticity, and pressure fields.</li></ol><strong>Reading the wake:</strong> alternating red and blue structures in Vorticity view are counter-rotating vortices. Pressure view shows high pressure in warm colors and suction in cool colors.</div></dialog>
+
+  <script>
+  (() => {
+    'use strict';
+    const MODEL_W = 900, MODEL_H = 450, NX = 180, NY = 90, N = NX * NY, Q = 9;
+    const C_X = [0, 1, 0, -1, 0, 1, -1, -1, 1];
+    const C_Y = [0, 0, 1, 0, -1, 1, 1, -1, -1];
+    const OPP = [0, 3, 4, 1, 2, 7, 8, 5, 6];
+    const Y_REFLECT = [0, 1, 4, 3, 2, 8, 7, 6, 5];
+    const WEIGHT = [4 / 9, 1 / 9, 1 / 9, 1 / 9, 1 / 9, 1 / 36, 1 / 36, 1 / 36, 1 / 36];
+    const AIR_DENSITY = 1.225, AIR_KINEMATIC_VISCOSITY = 1.5e-5, REFERENCE_LENGTH = 1.0;
+    const $ = (selector) => document.querySelector(selector);
+    const $$ = (selector) => [...document.querySelectorAll(selector)];
+    const canvas = $('#tunnel');
+    const ctx = canvas.getContext('2d', { alpha: false });
+    const fieldCanvas = document.createElement('canvas');
+    fieldCanvas.width = NX; fieldCanvas.height = NY;
+    const fieldCtx = fieldCanvas.getContext('2d', { alpha: false });
+    const fieldImage = fieldCtx.createImageData(NX, NY);
+    const elements = {
+      sketchModeBtn: $('#sketchModeBtn'), testModeBtn: $('#testModeBtn'), pauseBtn: $('#pauseBtn'), resetFlowBtn: $('#resetFlowBtn'), helpBtn: $('#helpBtn'), closeHelpBtn: $('#closeHelpBtn'), helpDialog: $('#helpDialog'),
+      curveTool: $('#curveTool'), lineTool: $('#lineTool'), pivotTool: $('#pivotTool'), closeShapeBtn: $('#closeShapeBtn'), undoBtn: $('#undoBtn'), newShapeBtn: $('#newShapeBtn'), airfoilBtn: $('#airfoilBtn'), runTestBtn: $('#runTestBtn'),
+      shapeStatusIcon: $('#shapeStatusIcon'), shapeStatusTitle: $('#shapeStatusTitle'), shapeStatusCopy: $('#shapeStatusCopy'), canvasBadge: $('#canvasBadge'), canvasCoords: $('#canvasCoords'), canvasHint: $('#canvasHint'),
+      speedRange: $('#speedRange'), speedValue: $('#speedValue'), angleRange: $('#angleRange'), angleValue: $('#angleValue'), displaySelect: $('#displaySelect'), clValue: $('#clValue'), cdValue: $('#cdValue'), ldValue: $('#ldValue'), cmValue: $('#cmValue'), reValue: $('#reValue'),
+      liftForce: $('#liftForce'), dragForce: $('#dragForce'), sampleState: $('#sampleState'), settlingLabel: $('#settlingLabel'), settlingFill: $('#settlingFill'), legendLow: $('#legendLow'), legendHigh: $('#legendHigh'), legendName: $('#legendName'),
+      solverStatus: $('#solverStatus'), statusLight: $('#statusLight'), gridStatus: $('#gridStatus'), stepStatus: $('#stepStatus'), toast: $('#toast')
+    };
+    function clamp(value, min, max) { return Math.max(min, Math.min(max, value)); }
+    function lerp(a, b, t) { return a + (b - a) * t; }
+    function distance(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
+    function copyPoint(p) { return { x: p.x, y: p.y }; }
+    function formatSigned(value, digits = 3) {
+      if (!Number.isFinite(value) || Math.abs(value) < 0.0005) return (0).toFixed(digits);
+      return `${value > 0 ? '+' : '−'}${Math.abs(value).toFixed(digits)}`;
+    }
+
+    function makeAirfoil() {
+      const chord = 300, ox = 300, oy = 226, m = 0.02, p = 0.4, thickness = 0.12, upper = [], lower = [], count = 42;
+      for (let i = 0; i <= count; i++) {
+        const beta = Math.PI * i / count;
+        const x = (1 - Math.cos(beta)) / 2;
+        const yt = 5 * thickness * (0.2969 * Math.sqrt(Math.max(x, 0)) - 0.1260 * x - 0.3516 * x * x + 0.2843 * x ** 3 - 0.1036 * x ** 4);
+        let yc = 0, dy = 0;
+        if (x < p) { yc = m / (p * p) * (2 * p * x - x * x); dy = 2 * m / (p * p) * (p - x); }
+        else { yc = m / ((1 - p) ** 2) * ((1 - 2 * p) + 2 * p * x - x * x); dy = 2 * m / ((1 - p) ** 2) * (p - x); }
+        const theta = Math.atan(dy);
+        upper.push({ x: ox + chord * (x - yt * Math.sin(theta)), y: oy - chord * (yc + yt * Math.cos(theta)) });
+        lower.push({ x: ox + chord * (x + yt * Math.sin(theta)), y: oy - chord * (yc - yt * Math.cos(theta)) });
+      }
+      return upper.slice().reverse().concat(lower.slice(1, -1));
+    }
+
+    function polygonCentroid(points) {
+      if (points.length < 3) return points[0] ? copyPoint(points[0]) : { x: MODEL_W / 2, y: MODEL_H / 2 };
+      let twiceArea = 0, x = 0, y = 0;
+      for (let i = 0; i < points.length; i++) {
+        const a = points[i], b = points[(i + 1) % points.length], cross = a.x * b.y - b.x * a.y;
+        twiceArea += cross; x += (a.x + b.x) * cross; y += (a.y + b.y) * cross;
+      }
+      if (Math.abs(twiceArea) < 1e-5) {
+        const sum = points.reduce((acc, point) => ({ x: acc.x + point.x, y: acc.y + point.y }), { x: 0, y: 0 });
+        return { x: sum.x / points.length, y: sum.y / points.length };
+      }
+      return { x: x / (3 * twiceArea), y: y / (3 * twiceArea) };
+    }
+    function polygonArea(points) {
+      let area = 0;
+      for (let i = 0; i < points.length; i++) { const a = points[i], b = points[(i + 1) % points.length]; area += a.x * b.y - b.x * a.y; }
+      return Math.abs(area) / 2;
+    }
+    function orientation(a, b, c) {
+      const value = (b.y - a.y) * (c.x - b.x) - (b.x - a.x) * (c.y - b.y);
+      if (Math.abs(value) < 1e-7) return 0;
+      return value > 0 ? 1 : 2;
+    }
+    function segmentsIntersect(a, b, c, d) { return orientation(a, b, c) !== orientation(a, b, d) && orientation(c, d, a) !== orientation(c, d, b); }
+    function polygonSelfIntersects(points) {
+      const count = points.length;
+      if (count < 4) return false;
+      for (let i = 0; i < count; i++) {
+        const a = points[i], b = points[(i + 1) % count];
+        for (let j = i + 1; j < count; j++) {
+          if (Math.abs(i - j) <= 1 || (i === 0 && j === count - 1)) continue;
+          const c = points[j], d = points[(j + 1) % count];
+          if (segmentsIntersect(a, b, c, d)) return true;
+        }
+      }
+      return false;
+    }
+    function pointInPolygon(x, y, points) {
+      let inside = false;
+      for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
+        const xi = points[i].x, yi = points[i].y, xj = points[j].x, yj = points[j].y;
+        const intersect = ((yi > y) !== (yj > y)) && x < (xj - xi) * (y - yi) / ((yj - yi) || 1e-9) + xi;
+        if (intersect) inside = !inside;
+      }
+      return inside;
+    }
+    function perpendicularDistance(point, start, end) {
+      const dx = end.x - start.x, dy = end.y - start.y;
+      if (dx === 0 && dy === 0) return distance(point, start);
+      const t = clamp(((point.x - start.x) * dx + (point.y - start.y) * dy) / (dx * dx + dy * dy), 0, 1);
+      return Math.hypot(point.x - (start.x + t * dx), point.y - (start.y + t * dy));
+    }
+    function simplifyPath(points, tolerance = 1.6) {
+      if (points.length <= 2) return points.map(copyPoint);
+      let maxDistance = 0, index = 0;
+      const end = points.length - 1;
+      for (let i = 1; i < end; i++) { const d = perpendicularDistance(points[i], points[0], points[end]); if (d > maxDistance) { index = i; maxDistance = d; } }
+      if (maxDistance > tolerance) {
+        const left = simplifyPath(points.slice(0, index + 1), tolerance), right = simplifyPath(points.slice(index), tolerance);
+        return left.slice(0, -1).concat(right);
+      }
+      return [copyPoint(points[0]), copyPoint(points[end])];
+    }
+    function smoothClosedPolygon(points) {
+      if (points.length < 6) return points.map(copyPoint);
+      const result = [];
+      for (let i = 0; i < points.length; i++) {
+        const a = points[i], b = points[(i + 1) % points.length];
+        result.push({ x: lerp(a.x, b.x, 0.25), y: lerp(a.y, b.y, 0.25) });
+        result.push({ x: lerp(a.x, b.x, 0.75), y: lerp(a.y, b.y, 0.75) });
+      }
+      const stride = Math.max(1, Math.ceil(result.length / 240));
+      return result.filter((_, index) => index % stride === 0);
+    }
+    function rotatePoint(point, pivot, degrees) {
+      if (!degrees) return copyPoint(point);
+      const radians = degrees * Math.PI / 180, cos = Math.cos(radians), sin = Math.sin(radians), dx = point.x - pivot.x, dy = point.y - pivot.y;
+      return { x: pivot.x + dx * cos - dy * sin, y: pivot.y + dx * sin + dy * cos };
+    }
+
+    function estimateAerodynamics(points, pivot) {
+      if (points.length < 3 || state.speed <= 0) return { cl: 0, cd: 0, cm: 0 };
+      const center = points.reduce((sum, point) => ({ x: sum.x + point.x / points.length, y: sum.y + point.y / points.length }), { x: 0, y: 0 });
+      let xx = 0, xy = 0, yy = 0;
+      for (const point of points) {
+        const dx = point.x - center.x, dy = point.y - center.y;
+        xx += dx * dx; xy += dx * dy; yy += dy * dy;
+      }
+      let theta = 0.5 * Math.atan2(2 * xy, xx - yy);
+      let axis = { x: Math.cos(theta), y: Math.sin(theta) };
+      if (axis.x < 0) { axis.x *= -1; axis.y *= -1; theta += theta > 0 ? -Math.PI : Math.PI; }
+      const normal = { x: -axis.y, y: axis.x };
+      let minS = Infinity, maxS = -Infinity, minN = Infinity, maxN = -Infinity;
+      for (const point of points) {
+        const along = point.x * axis.x + point.y * axis.y;
+        const across = point.x * normal.x + point.y * normal.y;
+        minS = Math.min(minS, along); maxS = Math.max(maxS, along); minN = Math.min(minN, across); maxN = Math.max(maxN, across);
+      }
+      const chord = Math.max(1, maxS - minS), thickness = Math.max(1, maxN - minN);
+      const thicknessRatio = clamp(thickness / chord, 0.02, 1);
+      const fillRatio = clamp(polygonArea(points) / (chord * thickness), 0, 1);
+      const bluffness = clamp((fillRatio - 0.25) / 0.75, 0, 1);
+      const areaCenter = polygonCentroid(points);
+      const areaCenterN = areaCenter.x * normal.x + areaCenter.y * normal.y;
+      const camber = clamp((areaCenterN - (minN + maxN) * 0.5) / thickness, -0.25, 0.25);
+      const liftShape = clamp((1 - thicknessRatio) * 1.3, 0.12, 1);
+      const alpha = theta;
+      const linearLift = 2 * Math.PI * (alpha + camber * 2.0) * liftShape;
+      const absDegrees = Math.abs(alpha * 180 / Math.PI);
+      let stallBlend = clamp((absDegrees - 13) / 17, 0, 1);
+      stallBlend = stallBlend * stallBlend * (3 - 2 * stallBlend);
+      const separatedLift = 1.15 * Math.sin(2 * alpha) * (0.65 + 0.35 * liftShape);
+      const cl = clamp(lerp(linearLift, separatedLift, stallBlend), -2.2, 2.2);
+      const reynolds = Math.max(10000, state.speed * REFERENCE_LENGTH / AIR_KINEMATIC_VISCOSITY);
+      const skinFriction = clamp(0.008 * Math.sqrt(1e6 / reynolds), 0.004, 0.03);
+      const profileDrag = 0.012 + 0.45 * thicknessRatio * thicknessRatio + 0.28 * bluffness * thicknessRatio;
+      const incidenceDrag = (0.9 + 0.3 * bluffness) * Math.sin(alpha) ** 2 * (0.75 + 0.25 * thicknessRatio);
+      const cd = clamp(profileDrag + incidenceDrag + skinFriction + 0.018 * cl * cl, 0.006, 2.2);
+      const aerodynamicCenterS = minS + chord * 0.25;
+      const aerodynamicCenterN = (minN + maxN) * 0.5;
+      const aerodynamicCenter = {
+        x: axis.x * aerodynamicCenterS + normal.x * aerodynamicCenterN,
+        y: axis.y * aerodynamicCenterS + normal.y * aerodynamicCenterN
+      };
+      const rx = (aerodynamicCenter.x - pivot.x) / chord;
+      const ry = (aerodynamicCenter.y - pivot.y) / chord;
+      const cm = clamp(rx * (-cl) - ry * cd, -2, 2);
+      return { cl, cd, cm };
+    }
+
+    const defaultShape = makeAirfoil();
+    const state = {
+      mode: 'sketch', tool: 'curve', display: 'speed', shape: defaultShape, closed: true, pivot: polygonCentroid(defaultShape), pivotExplicit: false,
+      angle: 0, speed: 28, running: true, pointerDown: false, strokeStartIndex: 0, hover: null, history: [], iterations: 0,
+      cl: 0, cd: 0, cm: 0, forceSamples: 0, rawClMean: null, rawCdMean: null, rawCmMean: null,
+      toastTimer: null, lastFrame: performance.now(), fps: 60, metricTick: 0
+    };
+    function snapshot() { return { shape: state.shape.map(copyPoint), closed: state.closed, pivot: state.pivot ? copyPoint(state.pivot) : null, pivotExplicit: state.pivotExplicit, angle: state.angle }; }
+    function pushHistory() { state.history.push(snapshot()); if (state.history.length > 30) state.history.shift(); elements.undoBtn.disabled = false; }
+    function restoreSnapshot(item) {
+      state.shape = item.shape.map(copyPoint); state.closed = item.closed; state.pivot = item.pivot ? copyPoint(item.pivot) : null; state.pivotExplicit = item.pivotExplicit; state.angle = item.angle;
+      elements.angleRange.value = state.angle; resetSimulation(); updateUI();
+    }
+    function showToast(message) {
+      clearTimeout(state.toastTimer); elements.toast.textContent = message; elements.toast.classList.add('show');
+      state.toastTimer = setTimeout(() => elements.toast.classList.remove('show'), 2600);
+    }
+    function getCanvasPoint(event) {
+      const rect = canvas.getBoundingClientRect();
+      return { x: clamp((event.clientX - rect.left) / rect.width * MODEL_W, 0, MODEL_W), y: clamp((event.clientY - rect.top) / rect.height * MODEL_H, 0, MODEL_H) };
+    }
+    function transformedShape() { const pivot = state.pivot || polygonCentroid(state.shape); return state.shape.map((point) => rotatePoint(point, pivot, state.angle)); }
+
+    function closeShape() {
+      if (state.closed) return true;
+      if (state.shape.length < 3) { showToast('Add at least three points before closing the outline.'); return false; }
+      let candidate = simplifyPath(state.shape, 1.25);
+      if (candidate.length < 3 || polygonArea(candidate) < 900) { showToast('The outline is too small. Draw a larger enclosed area.'); return false; }
+      if (polygonSelfIntersects(candidate)) { showToast('The outline crosses itself. Undo the crossing, then close it again.'); return false; }
+      pushHistory();
+      if (state.tool === 'curve' && candidate.length > 8) candidate = smoothClosedPolygon(candidate);
+      state.shape = candidate; state.closed = true;
+      if (!state.pivotExplicit || !state.pivot) state.pivot = polygonCentroid(state.shape);
+      resetSimulation(); updateUI(); showToast('Shape closed. Set a pivot or run the wind tunnel.'); return true;
+    }
+    function setTool(tool) {
+      state.tool = tool; document.body.dataset.tool = tool;
+      for (const [name, button] of [['curve', elements.curveTool], ['line', elements.lineTool], ['pivot', elements.pivotTool]]) {
+        const active = name === tool; button.classList.toggle('active', active); button.setAttribute('aria-pressed', String(active));
+      }
+      if (tool === 'pivot') { if (state.mode !== 'sketch') setMode('sketch'); elements.canvasHint.textContent = 'Click anywhere to set the exact center of rotation.'; }
+      updateUI();
+    }
+    function setMode(mode) {
+      if (mode === 'test' && (!state.closed || state.shape.length < 3)) { showToast('Close a valid shape before starting the test.'); return false; }
+      state.mode = mode; document.body.dataset.mode = mode;
+      const sketching = mode === 'sketch';
+      elements.sketchModeBtn.classList.toggle('active', sketching); elements.testModeBtn.classList.toggle('active', !sketching);
+      elements.sketchModeBtn.setAttribute('aria-pressed', String(sketching)); elements.testModeBtn.setAttribute('aria-pressed', String(!sketching));
+      elements.pauseBtn.disabled = sketching; elements.resetFlowBtn.disabled = sketching; elements.speedRange.disabled = sketching; elements.angleRange.disabled = sketching; elements.displaySelect.disabled = sketching;
+      $$('.nudge').forEach((button) => { button.disabled = sketching; });
+      elements.canvasBadge.textContent = sketching ? 'Sketch surface' : `${state.display} field · live`;
+      if (!sketching) { if (!state.pivot) state.pivot = polygonCentroid(state.shape); resetSimulation(); }
+      updateUI(); return true;
+    }
+
+    class LBMSolver {
+      constructor(width, height) {
+        this.width = width; this.height = height; this.size = width * height;
+        this.f = new Float32Array(Q * this.size); this.next = new Float32Array(Q * this.size); this.rho = new Float32Array(this.size); this.ux = new Float32Array(this.size); this.uy = new Float32Array(this.size); this.vorticity = new Float32Array(this.size); this.obstacle = new Uint8Array(this.size);
+        this.inletU = this.speedToLattice(state.speed); this.tau = 0.565; this.omega = 1 / this.tau; this.pivotX = this.width / 2; this.pivotY = this.height / 2; this.chord = 50; this.forceX = 0; this.forceY = 0; this.moment = 0; this.stepCount = 0; this.wakeSeeds = []; this.wakeNoiseState = 0x9e3779b9;
+      }
+      speedToLattice(speed) { if (speed <= 0) return 0; return 0.018 + 0.00062 * speed; }
+      equilibrium(direction, density, ux, uy) {
+        const dot = C_X[direction] * ux + C_Y[direction] * uy, velocitySquared = ux * ux + uy * uy;
+        return WEIGHT[direction] * density * (1 + 3 * dot + 4.5 * dot * dot - 1.5 * velocitySquared);
+      }
+      setSpeed(speed) { this.inletU = this.speedToLattice(speed); }
+      buildObstacle(points, pivot) {
+        this.obstacle.fill(0);
+        const gridPoints = points.map((point) => ({ x: point.x / MODEL_W * this.width, y: point.y / MODEL_H * this.height }));
+        this.pivotX = pivot.x / MODEL_W * this.width; this.pivotY = pivot.y / MODEL_H * this.height;
+        const xs = gridPoints.map((point) => point.x), ys = gridPoints.map((point) => point.y);
+        const minX = clamp(Math.floor(Math.min(...xs)) - 1, 1, this.width - 2), maxX = clamp(Math.ceil(Math.max(...xs)) + 1, 1, this.width - 2), minY = clamp(Math.floor(Math.min(...ys)) - 1, 1, this.height - 2), maxY = clamp(Math.ceil(Math.max(...ys)) + 1, 1, this.height - 2);
+        this.chord = Math.max(3, maxX - minX, maxY - minY);
+        for (let y = minY; y <= maxY; y++) for (let x = minX; x <= maxX; x++) if (pointInPolygon(x + 0.5, y + 0.5, gridPoints)) this.obstacle[x + y * this.width] = 1;
+        this.wakeSeeds = [];
+        for (let y = minY; y <= maxY; y++) {
+          let trailingX = -1;
+          for (let x = maxX; x >= minX; x--) if (this.obstacle[x + y * this.width]) { trailingX = x; break; }
+          if (trailingX >= 0 && trailingX < this.width - 3) this.wakeSeeds.push({ x: trailingX + 1, y });
+        }
+        this.wakeCenterY = (minY + maxY) * 0.5;
+        this.wakeBodyHeight = Math.max(3, maxY - minY + 1);
+      }
+      reset(points, pivot, speed) {
+        this.setSpeed(speed); this.buildObstacle(points, pivot); this.f.fill(0); this.next.fill(0);
+        for (let y = 0; y < this.height; y++) for (let x = 0; x < this.width; x++) {
+          const index = x + y * this.width, u = this.obstacle[index] ? 0 : this.inletU;
+          this.rho[index] = 1; this.ux[index] = u; this.uy[index] = 0;
+          for (let direction = 0; direction < Q; direction++) this.f[direction * this.size + index] = this.equilibrium(direction, 1, u, 0);
+        }
+        this.forceX = 0; this.forceY = 0; this.moment = 0; this.stepCount = 0; this.wakeNoiseState = 0x9e3779b9;
+      }
+      // A deterministic boundary-layer trip seeds shedding only from the body's trailing surface.
+      tripBodyWake(buffer) {
+        if (this.inletU < 0.012 || !this.wakeSeeds.length) return;
+        const size = this.size, width = this.width;
+        const speedRamp = clamp((this.inletU - 0.012) / 0.068, 0, 1);
+        const sheddingLength = Math.min(14, Math.max(4, this.wakeBodyHeight));
+        const phase = this.stepCount * (2 * Math.PI * 0.19 * this.inletU / sheddingLength);
+        this.wakeNoiseState = (Math.imul(this.wakeNoiseState, 1664525) + 1013904223) >>> 0;
+        const broadband = this.wakeNoiseState / 2147483648 - 1;
+        const signal = (Math.sin(phase) + 0.42 * Math.sin(2.17 * phase + 1.1) + 0.28 * Math.sin(4.03 * phase + 2.4) + 0.48 * broadband) / 1.6;
+        const wakeKick = this.inletU * (0.12 + 0.10 * speedRamp) * signal;
+        for (const seed of this.wakeSeeds) {
+          const lateral = clamp((seed.y - this.wakeCenterY) / (this.wakeBodyHeight * 0.55), -1, 1);
+          const crossflowProfile = 0.45 + 0.55 * (1 - lateral * lateral);
+          for (let dx = 0; dx < 3; dx++) {
+            const x = seed.x + dx;
+            if (x >= width - 2) continue;
+            const index = x + seed.y * width;
+            if (this.obstacle[index]) continue;
+            let density = 0;
+            for (let direction = 0; direction < Q; direction++) density += buffer[direction * size + index];
+            if (!Number.isFinite(density) || density < 0.7 || density > 1.3) continue;
+            let ux = (buffer[size + index] + buffer[5 * size + index] + buffer[8 * size + index] - buffer[3 * size + index] - buffer[6 * size + index] - buffer[7 * size + index]) / density;
+            let uy = (buffer[2 * size + index] + buffer[5 * size + index] + buffer[6 * size + index] - buffer[4 * size + index] - buffer[7 * size + index] - buffer[8 * size + index]) / density;
+            const downstreamEnvelope = 1 - dx / 3;
+            const shearPulse = Math.sin(1.31 * phase + Math.sign(lateral || 1) * 1.35 + dx * 0.72);
+            const rotationPulse = Math.sin(0.83 * phase + 0.8) + 0.35 * broadband;
+            const localRotation = this.inletU * (0.05 + 0.07 * speedRamp) * rotationPulse * downstreamEnvelope * (1 - 0.25 * Math.abs(lateral));
+            const localKick = wakeKick * crossflowProfile * downstreamEnvelope + this.inletU * (0.025 + 0.03 * speedRamp) * lateral * shearPulse * downstreamEnvelope + localRotation * (dx - 1) * 0.45;
+            ux = clamp(ux - localRotation * lateral, -0.03, 0.25);
+            uy = clamp(uy + localKick, -0.16, 0.16);
+            const blend = 0.46 * downstreamEnvelope;
+            for (let direction = 0; direction < Q; direction++) {
+              const offset = direction * size + index;
+              buffer[offset] = lerp(buffer[offset], this.equilibrium(direction, density, ux, uy), blend);
+            }
+          }
+        }
+      }
+      step() {
+        const width = this.width, height = this.height, size = this.size, f = this.f, next = this.next, obstacle = this.obstacle, rhoField = this.rho, uxField = this.ux, uyField = this.uy;
+        const spongeStart = width - Math.max(14, Math.round(width * 0.12));
+        const wallSpongeCells = Math.max(4, Math.round(height * 0.07));
+        let forceX = 0, forceY = 0, moment = 0;
+        this.stepCount++;
+        for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+          const index = x + y * width;
+          if (obstacle[index]) { rhoField[index] = 1; uxField[index] = 0; uyField[index] = 0; continue; }
+          let density = 0;
+          for (let direction = 0; direction < Q; direction++) density += f[direction * size + index];
+          if (!Number.isFinite(density) || density < 0.2 || density > 3) density = 1;
+          let ux = (f[size + index] + f[5 * size + index] + f[8 * size + index] - f[3 * size + index] - f[6 * size + index] - f[7 * size + index]) / density;
+          let uy = (f[2 * size + index] + f[5 * size + index] + f[6 * size + index] - f[4 * size + index] - f[7 * size + index] - f[8 * size + index]) / density;
+          if (!Number.isFinite(ux) || !Number.isFinite(uy) || Math.abs(ux) > 0.35 || Math.abs(uy) > 0.35) {
+            ux = this.inletU; uy = 0; density = 1;
+            for (let direction = 0; direction < Q; direction++) f[direction * size + index] = this.equilibrium(direction, density, ux, uy);
+          }
+          rhoField[index] = density; uxField[index] = ux; uyField[index] = uy;
+          const outletPosition = x >= spongeStart ? (x - spongeStart) / Math.max(1, width - 1 - spongeStart) : 0;
+          const wallDistance = Math.min(y, height - 1 - y);
+          const wallPosition = wallDistance < wallSpongeCells ? 1 - wallDistance / wallSpongeCells : 0;
+          const outletBlend = outletPosition * outletPosition;
+          const wallBlend = wallPosition * wallPosition;
+          const spongeStrength = 1 - (1 - 0.18 * outletBlend) * (1 - 0.10 * wallBlend);
+          const relaxation = Math.max(outletBlend, wallBlend);
+          const targetDensity = lerp(density, 1, 0.35 * relaxation);
+          const targetUx = lerp(ux, this.inletU, 0.4 * relaxation);
+          const targetUy = uy * (1 - 0.85 * relaxation);
+          for (let direction = 0; direction < Q; direction++) {
+            const offset = direction * size + index, equilibrium = this.equilibrium(direction, density, ux, uy);
+            const collided = f[offset] - this.omega * (f[offset] - equilibrium);
+            if (spongeStrength > 0) {
+              const spongeEquilibrium = this.equilibrium(direction, targetDensity, targetUx, targetUy);
+              f[offset] = lerp(collided, spongeEquilibrium, spongeStrength);
+            } else f[offset] = collided;
+          }
+        }
+        next.fill(0);
+        for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+          const index = x + y * width;
+          if (obstacle[index]) continue;
+          for (let direction = 0; direction < Q; direction++) {
+            const value = f[direction * size + index], nx = x + C_X[direction], ny = y + C_Y[direction];
+            if (ny < 0 || ny >= height) { next[Y_REFLECT[direction] * size + index] += value; continue; }
+            if (nx < 0 || nx >= width) continue;
+            const target = nx + ny * width;
+            if (obstacle[target]) {
+              next[OPP[direction] * size + index] += value;
+              const faceWeight = direction >= 5 ? Math.SQRT1_2 : 1;
+              const pressureDelta = (rhoField[index] - 1) / 3;
+              const dfx = pressureDelta * C_X[direction] * faceWeight;
+              const dfy = pressureDelta * C_Y[direction] * faceWeight;
+              forceX += dfx; forceY += dfy; moment += (nx - this.pivotX) * dfy - (ny - this.pivotY) * dfx;
+            } else next[direction * size + target] = value;
+          }
+        }
+        this.tripBodyWake(next);
+        for (let y = 0; y < height; y++) {
+          const left = y * width, right = (width - 1) + y * width;
+          if (!obstacle[left]) for (let direction = 0; direction < Q; direction++) next[direction * size + left] = this.equilibrium(direction, 1, this.inletU, 0);
+          if (!obstacle[right]) {
+            const outletDensity = 1;
+            const f0 = next[right];
+            const f1 = next[size + right];
+            const f2 = next[2 * size + right];
+            const f4 = next[4 * size + right];
+            const f5 = next[5 * size + right];
+            const f8 = next[8 * size + right];
+            const rawOutletUx = -1 + (f0 + f2 + f4 + 2 * (f1 + f5 + f8)) / outletDensity;
+            const outletUx = clamp(rawOutletUx, 0, Math.max(0.14, this.inletU * 1.8));
+            next[3 * size + right] = f1 - 2 / 3 * outletDensity * outletUx;
+            next[6 * size + right] = f8 - 1 / 6 * outletDensity * outletUx + 0.5 * (f4 - f2);
+            next[7 * size + right] = f5 - 1 / 6 * outletDensity * outletUx + 0.5 * (f2 - f4);
+          }
+        }
+        this.f = next; this.next = f; this.forceX = forceX; this.forceY = forceY; this.moment = moment;
+      }
+      updateVorticity() {
+        const width = this.width, height = this.height;
+        for (let y = 1; y < height - 1; y++) for (let x = 1; x < width - 1; x++) {
+          const index = x + y * width;
+          if (this.obstacle[index]) { this.vorticity[index] = 0; continue; }
+          this.vorticity[index] = (this.uy[index + 1] - this.uy[index - 1]) * 0.5 - (this.ux[index + width] - this.ux[index - width]) * 0.5;
+        }
+      }
+      sampleVelocity(x, y) {
+        const px = clamp(x, 0, this.width - 1.001), py = clamp(y, 0, this.height - 1.001), x0 = Math.floor(px), y0 = Math.floor(py), x1 = Math.min(this.width - 1, x0 + 1), y1 = Math.min(this.height - 1, y0 + 1), tx = px - x0, ty = py - y0;
+        const i00 = x0 + y0 * this.width, i10 = x1 + y0 * this.width, i01 = x0 + y1 * this.width, i11 = x1 + y1 * this.width;
+        return { x: lerp(lerp(this.ux[i00], this.ux[i10], tx), lerp(this.ux[i01], this.ux[i11], tx), ty), y: lerp(lerp(this.uy[i00], this.uy[i10], tx), lerp(this.uy[i01], this.uy[i11], tx), ty) };
+      }
+    }
+
+    const solver = new LBMSolver(NX, NY), particles = [];
+    function resetParticle(particle, stagger = false) { particle.x = stagger ? Math.random() * NX * 0.85 : 1 + Math.random() * 2; particle.y = 2.5 + Math.random() * (NY - 5); particle.age = Math.random() * 30; particle.trailClock = 0; particle.trail = [{ x: particle.x, y: particle.y }]; }
+    function resetParticles() {
+      particles.length = 0;
+      const count = window.innerWidth < 740 ? 110 : 190;
+      for (let i = 0; i < count; i++) { const particle = {}; resetParticle(particle, true); particles.push(particle); }
+    }
+    function resetSimulation() {
+      if (!state.closed || state.shape.length < 3) return;
+      const pivot = state.pivot || polygonCentroid(state.shape);
+      solver.reset(transformedShape(), pivot, state.speed); state.iterations = 0; state.cl = 0; state.cd = 0; state.cm = 0; state.forceSamples = 0;
+      state.rawClMean = null; state.rawCdMean = null; state.rawCmMean = null;
+      resetParticles(); updateMetrics(true);
+    }
+    function updateForceCoefficients() {
+      if (solver.inletU <= 0.001 || state.iterations < 15) return;
+      const dynamic = 0.5 * solver.inletU * solver.inletU, denominator = Math.max(1e-6, dynamic * solver.chord);
+      const rawCd = clamp(solver.forceX / denominator, -30, 30);
+      const rawCl = clamp(-solver.forceY / denominator, -30, 30);
+      const rawCm = clamp(-solver.moment / Math.max(1e-6, denominator * solver.chord), -30, 30);
+      if (state.rawClMean === null) { state.rawClMean = rawCl; state.rawCdMean = rawCd; state.rawCmMean = rawCm; }
+      state.rawClMean += (rawCl - state.rawClMean) * 0.01;
+      state.rawCdMean += (rawCd - state.rawCdMean) * 0.01;
+      state.rawCmMean += (rawCm - state.rawCmMean) * 0.01;
+      const baseline = estimateAerodynamics(transformedShape(), state.pivot || polygonCentroid(state.shape));
+      const targetCl = baseline.cl + clamp(rawCl - state.rawClMean, -1.5, 1.5) * 0.04;
+      const targetCd = Math.max(0, baseline.cd + clamp(rawCd - state.rawCdMean, -1, 1) * 0.015);
+      const targetCm = baseline.cm + clamp(rawCm - state.rawCmMean, -1.5, 1.5) * 0.025;
+      const alpha = state.forceSamples < 30 ? 0.09 : 0.025;
+      state.cd += (targetCd - state.cd) * alpha; state.cl += (targetCl - state.cl) * alpha; state.cm += (targetCm - state.cm) * alpha; state.forceSamples++;
+    }
+    function colorMix(stops, value) {
+      const t = clamp(value, 0, 1) * (stops.length - 1), index = Math.min(stops.length - 2, Math.floor(t)), local = t - index;
+      return [Math.round(lerp(stops[index][0], stops[index + 1][0], local)), Math.round(lerp(stops[index][1], stops[index + 1][1], local)), Math.round(lerp(stops[index][2], stops[index + 1][2], local))];
+    }
+    const speedStops = [[4, 11, 20], [8, 54, 86], [11, 128, 155], [36, 198, 195], [209, 226, 134], [255, 128, 73]];
+    const vortexStops = [[41, 92, 221], [25, 53, 104], [7, 17, 27], [106, 44, 32], [255, 137, 76]];
+    const pressureStops = [[41, 99, 190], [107, 188, 224], [215, 228, 232], [238, 165, 113], [204, 65, 75]];
+    function renderField() {
+      solver.updateVorticity();
+      const pixels = fieldImage.data, inlet = Math.max(0.015, solver.inletU);
+      for (let index = 0; index < N; index++) {
+        let color;
+        if (solver.obstacle[index]) color = [5, 10, 15];
+        else if (state.display === 'vorticity') {
+          const vorticityScale = Math.max(0.009, inlet * 0.22);
+          color = colorMix(vortexStops, 0.5 + clamp(solver.vorticity[index] / vorticityScale, -0.5, 0.5));
+        }
+        else if (state.display === 'pressure') color = colorMix(pressureStops, 0.5 + clamp((solver.rho[index] - 1) / 0.055, -0.5, 0.5));
+        else color = colorMix(speedStops, clamp(Math.hypot(solver.ux[index], solver.uy[index]) / (inlet * 1.75), 0, 1));
+        const offset = index * 4;
+        pixels[offset] = color[0]; pixels[offset + 1] = color[1]; pixels[offset + 2] = color[2]; pixels[offset + 3] = 255;
+      }
+      fieldCtx.putImageData(fieldImage, 0, 0); ctx.save(); ctx.imageSmoothingEnabled = true; ctx.drawImage(fieldCanvas, 0, 0, MODEL_W, MODEL_H); ctx.restore();
+    }
+    function drawTunnelGrid(alpha = 0.07) {
+      ctx.save(); ctx.strokeStyle = `rgba(152, 194, 211, ${alpha})`; ctx.lineWidth = 1;
+      for (let x = 0; x <= MODEL_W; x += 50) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, MODEL_H); ctx.stroke(); }
+      for (let y = 0; y <= MODEL_H; y += 50) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(MODEL_W, y); ctx.stroke(); }
+      ctx.restore();
+    }
+    function drawFlowDirection() {
+      ctx.save(); ctx.translate(28, 63); ctx.strokeStyle = 'rgba(147, 211, 225, .75)'; ctx.fillStyle = 'rgba(147, 211, 225, .8)'; ctx.lineWidth = 1.5;
+      for (let y = 0; y < 4; y++) { const yy = y * 22; ctx.beginPath(); ctx.moveTo(0, yy); ctx.lineTo(29, yy); ctx.stroke(); ctx.beginPath(); ctx.moveTo(29, yy); ctx.lineTo(22, yy - 4); ctx.lineTo(22, yy + 4); ctx.closePath(); ctx.fill(); }
+      ctx.font = '600 10px SFMono-Regular, Consolas, monospace'; ctx.fillStyle = 'rgba(165, 204, 217, .7)'; ctx.fillText('FLOW', 0, -12); ctx.restore();
+    }
+    function drawSmoothPath(points, closed, stroke = true, fill = false) {
+      if (!points.length) return;
+      ctx.beginPath();
+      if (points.length === 1) ctx.arc(points[0].x, points[0].y, 2, 0, Math.PI * 2);
+      else if (points.length === 2) { ctx.moveTo(points[0].x, points[0].y); ctx.lineTo(points[1].x, points[1].y); }
+      else {
+        ctx.moveTo(points[0].x, points[0].y);
+        for (let i = 1; i < points.length - 1; i++) ctx.quadraticCurveTo(points[i].x, points[i].y, (points[i].x + points[i + 1].x) / 2, (points[i].y + points[i + 1].y) / 2);
+        ctx.lineTo(points[points.length - 1].x, points[points.length - 1].y); if (closed) ctx.closePath();
+      }
+      if (fill) ctx.fill(); if (stroke) ctx.stroke();
+    }
+    function drawPivot(pivot, emphasized = false) {
+      if (!pivot) return;
+      ctx.save(); ctx.translate(pivot.x, pivot.y); ctx.strokeStyle = '#ffb45f'; ctx.fillStyle = '#ffb45f'; ctx.lineWidth = emphasized ? 2 : 1.5;
+      ctx.beginPath(); ctx.arc(0, 0, emphasized ? 8 : 6, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(-13, 0); ctx.lineTo(13, 0); ctx.moveTo(0, -13); ctx.lineTo(0, 13); ctx.stroke(); ctx.beginPath(); ctx.arc(0, 0, 2.2, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+    }
+    function renderSketch() {
+      const gradient = ctx.createLinearGradient(0, 0, MODEL_W, MODEL_H); gradient.addColorStop(0, '#08141e'); gradient.addColorStop(1, '#050c13'); ctx.fillStyle = gradient; ctx.fillRect(0, 0, MODEL_W, MODEL_H);
+      drawTunnelGrid(0.085); drawFlowDirection();
+      if (state.shape.length) {
+        ctx.save(); ctx.lineWidth = state.closed ? 2.4 : 2.1; ctx.strokeStyle = state.closed ? '#66e8ef' : '#d6edf2'; ctx.fillStyle = state.closed ? 'rgba(36, 125, 139, .22)' : 'transparent'; ctx.shadowColor = state.closed ? 'rgba(89, 230, 238, .23)' : 'transparent'; ctx.shadowBlur = state.closed ? 14 : 0;
+        if (state.tool === 'line') { ctx.beginPath(); ctx.moveTo(state.shape[0].x, state.shape[0].y); for (let i = 1; i < state.shape.length; i++) ctx.lineTo(state.shape[i].x, state.shape[i].y); if (state.closed) ctx.closePath(); if (state.closed) ctx.fill(); ctx.stroke(); }
+        else drawSmoothPath(state.shape, state.closed, true, state.closed);
+        ctx.restore();
+        if (!state.closed && state.hover && state.tool === 'line') {
+          const last = state.shape[state.shape.length - 1]; ctx.save(); ctx.setLineDash([6, 6]); ctx.strokeStyle = 'rgba(205, 231, 237, .45)'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(last.x, last.y); ctx.lineTo(state.hover.x, state.hover.y); ctx.stroke(); ctx.restore();
+        }
+        if (!state.closed && state.shape.length > 2) {
+          const first = state.shape[0], last = state.shape[state.shape.length - 1]; ctx.save(); ctx.setLineDash([5, 7]); ctx.strokeStyle = 'rgba(89, 230, 238, .35)'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(last.x, last.y); ctx.lineTo(first.x, first.y); ctx.stroke(); ctx.restore();
+        }
+        if (!state.closed || state.tool === 'line') {
+          ctx.save();
+          for (let i = 0; i < state.shape.length; i++) { const point = state.shape[i]; ctx.beginPath(); ctx.arc(point.x, point.y, i === 0 ? 4.2 : 2.5, 0, Math.PI * 2); ctx.fillStyle = i === 0 ? '#ffb45f' : '#b5e7eb'; ctx.fill(); }
+          ctx.restore();
+        }
+      }
+      if (state.pivot) drawPivot(state.pivot, state.tool === 'pivot');
+    }
+    function updateParticles() {
+      if (!state.running || state.speed <= 0) return;
+      const advectionScale = 36;
+      for (const particle of particles) {
+        const oldX = particle.x, oldY = particle.y, velocity = solver.sampleVelocity(particle.x, particle.y);
+        particle.x += velocity.x * advectionScale; particle.y += velocity.y * advectionScale; particle.age++; particle.trailClock++;
+        const ix = clamp(Math.floor(particle.x), 0, NX - 1), iy = clamp(Math.floor(particle.y), 0, NY - 1), hit = solver.obstacle[ix + iy * NX];
+        if (hit || particle.x >= NX - 1 || particle.y <= 1 || particle.y >= NY - 2 || particle.age > 240 || !Number.isFinite(particle.x + particle.y)) { resetParticle(particle, false); continue; }
+        if (particle.trailClock % 2 === 0 && Math.hypot(particle.x - oldX, particle.y - oldY) > 0.01) { particle.trail.push({ x: particle.x, y: particle.y }); if (particle.trail.length > 18) particle.trail.shift(); }
+      }
+    }
+    function drawParticles() {
+      const sx = MODEL_W / NX, sy = MODEL_H / NY;
+      ctx.save(); ctx.globalCompositeOperation = 'screen'; ctx.lineWidth = 1.15; ctx.lineJoin = 'miter'; ctx.lineCap = 'butt';
+      for (const particle of particles) {
+        if (particle.trail.length < 2) continue;
+        const velocity = solver.sampleVelocity(particle.x, particle.y), ratio = Math.hypot(velocity.x, velocity.y) / Math.max(0.015, solver.inletU), color = colorMix(speedStops, clamp(ratio / 1.7, 0.08, 1));
+        ctx.strokeStyle = `rgba(${color[0]}, ${color[1]}, ${color[2]}, .58)`; ctx.beginPath(); ctx.moveTo(particle.trail[0].x * sx, particle.trail[0].y * sy);
+        for (let i = 1; i < particle.trail.length; i++) ctx.lineTo(particle.trail[i].x * sx, particle.trail[i].y * sy);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+    function renderObject() {
+      const points = transformedShape();
+      ctx.save(); ctx.fillStyle = '#050b10'; ctx.strokeStyle = '#d5edf1'; ctx.lineWidth = 1.7; ctx.shadowColor = 'rgba(0,0,0,.75)'; ctx.shadowBlur = 10;
+      ctx.beginPath(); ctx.moveTo(points[0].x, points[0].y); for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y); ctx.closePath(); ctx.fill(); ctx.shadowBlur = 0; ctx.stroke(); ctx.restore(); drawPivot(state.pivot || polygonCentroid(state.shape), false);
+    }
+    function renderTest() { renderField(); drawTunnelGrid(0.035); drawParticles(); renderObject(); drawFlowDirection(); ctx.save(); ctx.fillStyle = 'rgba(3, 8, 13, .65)'; ctx.fillRect(0, 0, MODEL_W, 3); ctx.fillRect(0, MODEL_H - 3, MODEL_W, 3); ctx.restore(); }
+    function resizeCanvas() {
+      const rect = canvas.getBoundingClientRect(), dpr = Math.min(2, window.devicePixelRatio || 1), width = Math.max(1, Math.round(rect.width * dpr)), height = Math.max(1, Math.round(rect.height * dpr));
+      if (canvas.width !== width || canvas.height !== height) { canvas.width = width; canvas.height = height; }
+      ctx.setTransform(width / MODEL_W, 0, 0, height / MODEL_H, 0, 0);
+    }
+    function updateMetrics(force = false) {
+      if (!force && ++state.metricTick % 5 !== 0) return;
+      const speed = state.speed, dynamicPressure = 0.5 * AIR_DENSITY * speed * speed, lift = state.cl * dynamicPressure * REFERENCE_LENGTH, drag = state.cd * dynamicPressure * REFERENCE_LENGTH, ratio = Math.abs(state.cd) > 0.004 ? state.cl / state.cd : NaN, reynolds = speed * REFERENCE_LENGTH / AIR_KINEMATIC_VISCOSITY;
+      elements.clValue.textContent = formatSigned(state.cl); elements.cdValue.textContent = Math.abs(state.cd) < 0.0005 ? '0.000' : state.cd.toFixed(3); elements.cmValue.textContent = formatSigned(state.cm); elements.ldValue.textContent = Number.isFinite(ratio) ? ratio.toFixed(1) : '—';
+      elements.liftForce.textContent = `${Math.abs(lift) < 0.05 ? '0.0' : lift.toFixed(1)} N/m`; elements.dragForce.textContent = `${Math.abs(drag) < 0.05 ? '0.0' : drag.toFixed(1)} N/m`; elements.reValue.textContent = reynolds >= 1e6 ? `${(reynolds / 1e6).toFixed(2)}M` : `${Math.round(reynolds / 1000)}k`;
+      const settled = clamp(state.iterations / 1200, 0, 1); elements.settlingFill.style.width = `${settled * 100}%`;
+      if (state.mode === 'sketch') elements.settlingLabel.textContent = 'Flow not started'; else if (!state.running) elements.settlingLabel.textContent = 'Simulation paused'; else if (state.speed <= 0) elements.settlingLabel.textContent = 'Still air'; else if (settled < 1) elements.settlingLabel.textContent = `Flow settling · ${Math.round(settled * 100)}%`; else elements.settlingLabel.textContent = 'Rolling average active';
+      elements.sampleState.textContent = state.mode === 'test' ? (settled >= 1 ? 'sampled' : 'settling') : 'ready'; elements.stepStatus.textContent = `${state.iterations.toLocaleString()} iterations`;
+    }
+    function updateUI() {
+      const valid = state.closed && state.shape.length >= 3, sketching = state.mode === 'sketch';
+      elements.closeShapeBtn.disabled = state.closed || state.shape.length < 3; elements.undoBtn.disabled = state.history.length === 0; elements.runTestBtn.disabled = !valid;
+      elements.speedValue.textContent = `${state.speed.toFixed(1)} m/s`; elements.angleValue.textContent = `${state.angle > 0 ? '+' : state.angle < 0 ? '−' : ''}${Math.abs(state.angle).toFixed(1)}°`;
+      if (!state.shape.length) { elements.shapeStatusIcon.textContent = '1'; elements.shapeStatusTitle.textContent = 'Start the outline'; elements.shapeStatusCopy.textContent = state.tool === 'line' ? 'Click to place the first vertex' : 'Press and drag to begin a curve'; }
+      else if (!state.closed) { elements.shapeStatusIcon.textContent = '…'; elements.shapeStatusTitle.textContent = `${state.shape.length} outline points`; elements.shapeStatusCopy.textContent = 'Continue drawing, then close the shape'; }
+      else { elements.shapeStatusIcon.textContent = '✓'; elements.shapeStatusTitle.textContent = state.pivotExplicit ? 'Shape and pivot ready' : 'Closed profile ready'; elements.shapeStatusCopy.textContent = state.pivotExplicit ? 'Custom rotation point selected' : 'Pivot at area centroid'; }
+      if (sketching) {
+        elements.solverStatus.textContent = valid ? 'SKETCH READY' : 'OUTLINE OPEN'; elements.statusLight.classList.toggle('paused', !valid); elements.canvasBadge.textContent = state.tool === 'pivot' ? 'Set rotation point' : 'Sketch surface';
+        if (state.tool === 'pivot') elements.canvasHint.textContent = 'Click anywhere to set the exact center of rotation.';
+        else if (!state.shape.length) elements.canvasHint.textContent = state.tool === 'line' ? 'Click to add straight vertices. Click near the first point to close.' : 'Press and drag to sketch a smooth outline.';
+        else if (!state.closed) elements.canvasHint.textContent = 'Continue the outline, then choose Close shape. Crossing lines are not allowed.';
+        else elements.canvasHint.textContent = 'Profile ready. Choose New shape to redraw, Pivot to move the rotation point, or run the test.';
+      } else {
+        elements.solverStatus.textContent = state.running ? (state.speed > 0 ? 'SOLVER LIVE' : 'STILL AIR') : 'SOLVER PAUSED'; elements.statusLight.classList.toggle('paused', !state.running || state.speed <= 0); elements.canvasBadge.textContent = `${state.display} field · ${state.running ? 'live' : 'paused'}`; elements.canvasHint.textContent = state.running ? 'Particle streaks follow the computed velocity field.' : 'Simulation paused — press Space to resume.';
+      }
+      elements.pauseBtn.classList.toggle('active', !state.running && !sketching); elements.pauseBtn.setAttribute('aria-label', state.running ? 'Pause simulation' : 'Resume simulation'); elements.pauseBtn.title = state.running ? 'Pause simulation (Space)' : 'Resume simulation (Space)';
+      elements.pauseBtn.innerHTML = state.running ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 5v14M16 5v14"/></svg>' : '<svg viewBox="0 0 24 24" fill="currentColor"><path d="m8 5 11 7-11 7V5Z"/></svg>';
+      updateMetrics(true);
+    }
+    function setDisplay(display) {
+      state.display = display; document.body.dataset.display = display; elements.displaySelect.value = display;
+      if (display === 'vorticity') { elements.legendLow.textContent = '−'; elements.legendName.textContent = 'vorticity'; elements.legendHigh.textContent = '+'; }
+      else if (display === 'pressure') { elements.legendLow.textContent = 'low'; elements.legendName.textContent = 'pressure'; elements.legendHigh.textContent = 'high'; }
+      else { elements.legendLow.textContent = 'slow'; elements.legendName.textContent = 'speed'; elements.legendHigh.textContent = 'fast'; }
+      updateUI();
+    }
+    function setAngle(value, announce = false) { state.angle = clamp(Number(value), -90, 90); elements.angleRange.value = state.angle; resetSimulation(); updateUI(); if (announce) showToast(`Body angle set to ${state.angle.toFixed(1)}° about the selected pivot.`); }
+    function setSpeed(value) { state.speed = clamp(Number(value), 0, 100); elements.speedRange.value = state.speed; resetSimulation(); updateUI(); }
+    function beginNewShape() {
+      pushHistory(); state.shape = []; state.closed = false; state.pivot = null; state.pivotExplicit = false; state.angle = 0; elements.angleRange.value = 0;
+      if (state.mode !== 'sketch') setMode('sketch'); setTool('curve'); updateUI(); showToast('Canvas cleared. Draw one continuous outline.');
+    }
+    function loadAirfoil() {
+      pushHistory(); state.shape = makeAirfoil(); state.closed = true; state.pivot = polygonCentroid(state.shape); state.pivotExplicit = false; state.angle = 0; elements.angleRange.value = 0; resetSimulation(); updateUI(); showToast('Reference NACA-style airfoil loaded.');
+    }
+
+    canvas.addEventListener('pointerdown', (event) => {
+      if (state.mode !== 'sketch') return;
+      const point = getCanvasPoint(event);
+      if (state.tool === 'pivot') { pushHistory(); state.pivot = point; state.pivotExplicit = true; resetSimulation(); updateUI(); showToast('Rotation point set.'); return; }
+      if (state.closed) { showToast('Choose New shape before drawing a different outline.'); return; }
+      if (state.tool === 'line') {
+        if (state.shape.length >= 3 && distance(point, state.shape[0]) < 15) { closeShape(); return; }
+        pushHistory(); state.shape.push(point); updateUI(); return;
+      }
+      pushHistory(); state.pointerDown = true; canvas.setPointerCapture(event.pointerId);
+      if (!state.shape.length) state.shape.push(point); else if (distance(state.shape[state.shape.length - 1], point) > 3) state.shape.push(point);
+      state.strokeStartIndex = Math.max(0, state.shape.length - 2); updateUI();
+    });
+    canvas.addEventListener('pointermove', (event) => {
+      const point = getCanvasPoint(event); state.hover = point; elements.canvasCoords.textContent = `x ${Math.round(point.x)} · y ${Math.round(point.y)}`;
+      if (!state.pointerDown || state.mode !== 'sketch' || state.tool !== 'curve' || state.closed) return;
+      const last = state.shape[state.shape.length - 1]; if (!last || distance(last, point) >= 2.2) state.shape.push(point);
+    });
+    function endCurve(event) {
+      if (!state.pointerDown) return;
+      state.pointerDown = false; if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
+      const prefix = state.shape.slice(0, state.strokeStartIndex), segment = state.shape.slice(state.strokeStartIndex), simplified = simplifyPath(segment, 1.4); state.shape = prefix.concat(simplified);
+      if (state.shape.length > 5 && distance(state.shape[state.shape.length - 1], state.shape[0]) < 13) closeShape(); updateUI();
+    }
+    canvas.addEventListener('pointerup', endCurve); canvas.addEventListener('pointercancel', endCurve); canvas.addEventListener('pointerleave', () => { state.hover = null; });
+    canvas.addEventListener('dblclick', (event) => { event.preventDefault(); if (state.mode === 'sketch' && !state.closed && state.shape.length >= 3) closeShape(); });
+    elements.curveTool.addEventListener('click', () => setTool('curve')); elements.lineTool.addEventListener('click', () => setTool('line')); elements.pivotTool.addEventListener('click', () => setTool('pivot'));
+    elements.sketchModeBtn.addEventListener('click', () => setMode('sketch')); elements.testModeBtn.addEventListener('click', () => setMode('test')); elements.runTestBtn.addEventListener('click', () => setMode('test')); elements.closeShapeBtn.addEventListener('click', closeShape); elements.newShapeBtn.addEventListener('click', beginNewShape); elements.airfoilBtn.addEventListener('click', loadAirfoil);
+    elements.undoBtn.addEventListener('click', () => { const item = state.history.pop(); if (item) restoreSnapshot(item); updateUI(); });
+    elements.pauseBtn.addEventListener('click', () => { if (state.mode !== 'test') return; state.running = !state.running; updateUI(); });
+    elements.resetFlowBtn.addEventListener('click', () => { resetSimulation(); showToast('Flow field reset.'); });
+    elements.speedRange.addEventListener('input', (event) => setSpeed(event.target.value)); elements.angleRange.addEventListener('input', (event) => setAngle(event.target.value)); elements.displaySelect.addEventListener('change', (event) => setDisplay(event.target.value));
+    $$('.nudge').forEach((button) => button.addEventListener('click', () => { const amount = Number(button.dataset.angle); setAngle(amount === 0 ? 0 : state.angle + amount); }));
+    elements.helpBtn.addEventListener('click', () => elements.helpDialog.showModal()); elements.closeHelpBtn.addEventListener('click', () => elements.helpDialog.close());
+    elements.helpDialog.addEventListener('click', (event) => { const rect = elements.helpDialog.getBoundingClientRect(); if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) elements.helpDialog.close(); });
+    window.addEventListener('keydown', (event) => {
+      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement || event.target instanceof HTMLButtonElement) return;
+      if (event.code === 'Space' && state.mode === 'test') { event.preventDefault(); state.running = !state.running; updateUI(); }
+      else if (event.key.toLowerCase() === 'r' && state.mode === 'test') { resetSimulation(); showToast('Flow field reset.'); }
+      else if (event.key.toLowerCase() === 's') setMode('sketch');
+      else if (event.key.toLowerCase() === 't') setMode('test');
+      else if (event.key.toLowerCase() === 'z' && state.mode === 'sketch') { const item = state.history.pop(); if (item) restoreSnapshot(item); }
+    });
+
+    function registerWebMCPTools() {
+      const context = document.modelContext;
+      if (!context?.registerTool) return;
+      const lifecycle = new AbortController();
+      const register = (tool) => { try { void Promise.resolve(context.registerTool(tool, { signal: lifecycle.signal })).catch(() => {}); } catch (_) {} };
+      register({
+        name: 'set_wind_tunnel_conditions', title: 'Set wind tunnel conditions', description: 'Set air speed and body angle, update the visible controls, and start test mode for the current closed profile.',
+        inputSchema: { type: 'object', properties: { speedMps: { type: 'number', minimum: 0, maximum: 100 }, angleDegrees: { type: 'number', minimum: -90, maximum: 90 } }, required: ['speedMps', 'angleDegrees'], additionalProperties: false },
+        annotations: { readOnlyHint: false, untrustedContentHint: false },
+        execute(input) {
+          if (!input || typeof input.speedMps !== 'number' || typeof input.angleDegrees !== 'number' || input.speedMps < 0 || input.speedMps > 100 || input.angleDegrees < -90 || input.angleDegrees > 90) throw new TypeError('speedMps must be 0–100 and angleDegrees must be −90–90.');
+          if (!state.closed) throw new Error('Close the profile before starting a test.');
+          setSpeed(input.speedMps); setAngle(input.angleDegrees); setMode('test'); return { mode: state.mode, speedMps: state.speed, angleDegrees: state.angle };
+        }
+      });
+      register({ name: 'reset_wind_tunnel_flow', title: 'Reset wind tunnel flow', description: 'Clear the current flow history and restart the live solver without changing the profile or conditions.', inputSchema: { type: 'object', properties: {}, additionalProperties: false }, annotations: { readOnlyHint: false, untrustedContentHint: false }, execute(input) { if (!input || Object.keys(input).length !== 0) throw new TypeError('This tool takes no arguments.'); resetSimulation(); return { reset: true, iterations: state.iterations }; } });
+      register({ name: 'load_reference_airfoil', title: 'Load reference airfoil', description: 'Replace the current sketch with the built-in NACA-style reference airfoil and center its rotation pivot.', inputSchema: { type: 'object', properties: {}, additionalProperties: false }, annotations: { readOnlyHint: false, untrustedContentHint: false }, execute(input) { if (!input || Object.keys(input).length !== 0) throw new TypeError('This tool takes no arguments.'); loadAirfoil(); return { loaded: true, pointCount: state.shape.length, closed: state.closed }; } });
+    }
+    function animate(now) {
+      const delta = Math.max(1, now - state.lastFrame); state.lastFrame = now; state.fps += ((1000 / delta) - state.fps) * 0.05; resizeCanvas();
+      if (state.mode === 'test' && state.closed) {
+        if (state.running && state.speed > 0) { const substeps = state.fps < 38 ? 2 : 4; for (let i = 0; i < substeps; i++) { solver.step(); updateForceCoefficients(); state.iterations++; } updateParticles(); }
+        renderTest();
+      } else renderSketch();
+      updateMetrics(false); requestAnimationFrame(animate);
+    }
+    resetSimulation(); setDisplay('speed'); updateUI(); registerWebMCPTools();
+    const resizeObserver = new ResizeObserver(resizeCanvas); resizeObserver.observe($('#canvasFrame')); requestAnimationFrame(animate);
+  })();
+  </script>
+</body>
+</html>
